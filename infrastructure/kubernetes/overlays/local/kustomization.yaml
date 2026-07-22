@@ -1,9 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Local Kind cluster: images are loaded into the Kind node with
-#   kind load docker-image application-service:latest ...
-# so imagePullPolicy must not force a registry pull.
+# Local Kind overlay.
+#
+# Images are loaded into the Kind node with `kind load docker-image`, so they must
+# never be pulled from a registry (imagePullPolicy: IfNotPresent).
+#
+# This overlay also trims replicas and resource requests so the whole stack fits
+# on a laptop (~4.5 GB allocated to Docker). The prod overlay keeps the full
+# sizing — that separation is the point of having overlays.
 resources:
   - ../../base
 
@@ -17,7 +22,14 @@ images:
   - name: frontend
     newTag: latest
 
+replicas:
+  - name: application-service
+    count: 1
+  - name: frontend
+    count: 1
+
 patches:
+  # Never pull — images are side-loaded into the node.
   - target:
       kind: Deployment
       labelSelector: "app.kubernetes.io/part-of=jobtracker"
@@ -25,3 +37,66 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
+
+  # --- Trim resource requests to fit a laptop -----------------------------
+  - target:
+      kind: Deployment
+      name: application-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { cpu: "1", memory: "512Mi" }
+
+  - target:
+      kind: Deployment
+      name: notification-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "75m", memory: "224Mi" }
+          limits: { cpu: "500m", memory: "448Mi" }
+
+  - target:
+      kind: Deployment
+      name: analytics-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "75m", memory: "224Mi" }
+          limits: { cpu: "500m", memory: "448Mi" }
+
+  - target:
+      kind: StatefulSet
+      name: kafka
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "150m", memory: "384Mi" }
+          limits: { cpu: "1", memory: "768Mi" }
+
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "75m", memory: "128Mi" }
+          limits: { cpu: "500m", memory: "256Mi" }
+
+  # HPA can still scale application-service, just within a smaller ceiling.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: application-service
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

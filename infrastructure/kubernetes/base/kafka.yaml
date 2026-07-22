@@ -1,4 +1,9 @@
-# Single-node Kafka in KRaft mode (no ZooKeeper) — sufficient for a demo cluster.
+# Single-node Kafka in KRaft mode (no ZooKeeper).
+#
+# Uses the Confluent image rather than bitnami/kafka: Bitnami withdrew their free
+# public Docker Hub images, so `bitnami/kafka:<tag>` no longer pulls. This image
+# is also the one docker-compose already uses, so it can be side-loaded into a
+# Kind cluster with `kind load docker-image confluentinc/cp-kafka:7.6.1`.
 apiVersion: v1
 kind: Service
 metadata:
@@ -11,6 +16,9 @@ spec:
     - name: client
       port: 9092
       targetPort: 9092
+    - name: controller
+      port: 9093
+      targetPort: 9093
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -28,55 +36,70 @@ spec:
       labels:
         app: kafka
     spec:
+      # Kubernetes injects env vars for every Service in the namespace
+      # (KAFKA_PORT=tcp://10.96.x.x:9092, KAFKA_SERVICE_HOST, ...). The Confluent
+      # image treats every KAFKA_* variable as broker configuration, so those
+      # injected values land in server.properties and the broker exits 1 during
+      # "Configuring ...". Turning off service links is the standard fix.
+      enableServiceLinks: false
       containers:
         - name: kafka
-          image: bitnami/kafka:3.7
+          image: confluentinc/cp-kafka:7.6.1
           ports:
             - containerPort: 9092
             - containerPort: 9093
           env:
-            - name: KAFKA_CFG_NODE_ID
-              value: "0"
-            - name: KAFKA_CFG_PROCESS_ROLES
-              value: "controller,broker"
-            - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-              value: "0@kafka:9093"
-            - name: KAFKA_CFG_LISTENERS
+            # Fixed cluster ID so restarts reuse the same KRaft metadata.
+            - name: CLUSTER_ID
+              value: "MkU3OEVBNTcwNTJENDM2Qk"
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            # Single-node KRaft: broker and controller are the same process, so
+            # the voter address is localhost. Pointing it at the "kafka" Service
+            # instead makes the pod hairpin through its own ClusterIP, which does
+            # not route back in kind — the broker then never registers and the
+            # readiness probe never passes.
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@localhost:9093"
+            - name: KAFKA_LISTENERS
               value: "PLAINTEXT://:9092,CONTROLLER://:9093"
-            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+            - name: KAFKA_ADVERTISED_LISTENERS
               value: "PLAINTEXT://kafka:9092"
-            - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
               value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-            - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: "CONTROLLER"
-            - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
               value: "PLAINTEXT"
-            - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
               value: "1"
-            - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
               value: "1"
-            - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
               value: "1"
-            - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "true"
-            - name: ALLOW_PLAINTEXT_LISTENER
-              value: "yes"
+            - name: KAFKA_LOG_DIRS
+              value: "/var/lib/kafka/data"
           volumeMounts:
             - name: data
-              mountPath: /bitnami/kafka
+              mountPath: /var/lib/kafka/data
           readinessProbe:
             tcpSocket:
               port: 9092
-            initialDelaySeconds: 20
+            initialDelaySeconds: 25
             periodSeconds: 10
+            failureThreshold: 12
           resources:
-            requests: { cpu: "250m", memory: "512Mi" }
+            requests: { cpu: "150m", memory: "384Mi" }
             limits: { cpu: "1", memory: "1Gi" }
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 2Gi
+      volumes:
+        # emptyDir rather than a PVC: this is a demo cluster, and it avoids the
+        # volume-permission dance the Confluent image needs when running as
+        # non-root against a freshly provisioned PersistentVolume.
+        - name: data
+          emptyDir: {}

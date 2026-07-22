@@ -1,16 +1,17 @@
-# Create with:  kind create cluster --name jobtracker --config kind-cluster.yaml
+# Local Kind cluster.
+#   kind create cluster --config kind-cluster.yaml
+#
+# Single-node by default: Kafka + PostgreSQL + Redis + 4 app pods is already a
+# heavy workload for a laptop, and multi-node adds ~1 GB overhead per extra node
+# without changing anything you can demonstrate (probes, HPA, self-healing and
+# rescheduling all work fine on one node).
+#
+# If you have 12 GB+ free for Docker, uncomment the workers below to show pods
+# being scheduled across nodes.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: jobtracker
 nodes:
   - role: control-plane
-    extraPortMappings:
-      # Expose application-service via NodePort 30081 -> localhost:8081
-      - containerPort: 30081
-        hostPort: 8081
-        protocol: TCP
-      - containerPort: 30083
-        hostPort: 8083
-        protocol: TCP
-  - role: worker
-  - role: worker
+  # - role: worker
+  # - role: worker
