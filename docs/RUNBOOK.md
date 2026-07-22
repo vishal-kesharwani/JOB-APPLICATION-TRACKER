@@ -69,7 +69,15 @@ notification + analytics results):
 ./scripts/demo.sh
 ```
 
-**Ports:** application 8081 · notification 8082 · analytics 8083 · Postgres 5434 · Redis 6379.
+**Open the UI at http://localhost:8080** — create applications, change their status,
+and watch reminders and analytics update live. That's the easiest way to demo the
+whole event-driven pipeline without touching curl.
+
+**Ports:** UI 8080 · application 8081 · notification 8082 · analytics 8083 · Postgres 5434 · Redis 6379.
+
+> The frontend also has a hot-reload dev server if you want to change the UI:
+> `cd frontend && npm install && npm run dev` → http://localhost:5173 (it proxies
+> API calls to the running backend containers).
 
 **Stop:** `Ctrl-C` in the first terminal, then `docker compose down`.
 To also wipe the database/Redis volumes: `docker compose down -v`.

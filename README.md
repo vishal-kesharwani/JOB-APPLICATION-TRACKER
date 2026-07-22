@@ -1,198 +1,243 @@
-# Job Application Tracker — Cloud-Native Observability Platform
+<div align="center">
 
-An event-driven microservices platform that tracks job applications end to end —
-built to demonstrate production-grade backend engineering, event-driven
-architecture, Kubernetes deployment, and full-stack observability (metrics, logs,
-traces).
+# 🎯 Job Application Tracker
 
-> **Status:** all three services (`application-service`, `notification-service`,
-> `analytics-service`) are complete and functional. Observability (LGTM),
-> Kubernetes manifests, Terraform (EKS), and the CI/CD + GitOps pipeline are in place.
+### Cloud-Native, Event-Driven Application Tracking System
 
-## Architecture
+A full-stack job application tracker built as a **production-grade microservices platform** —
+event-driven backend, full observability, Kubernetes deployment, and GitOps delivery.
+
+[![Java](https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/)
+[![Kafka](https://img.shields.io/badge/Apache_Kafka-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![Grafana](https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white)](https://grafana.com/)
+
+</div>
+
+---
+
+![Applications](docs/screenshots/ui-applications.png)
+
+## What it is
+
+Most job trackers are a CRUD app over one database. This one is deliberately built the way a
+real distributed system is built: **three independent services that never call each other**.
+They communicate purely through Kafka events.
+
+When you create or update an application, `application-service` writes to PostgreSQL and
+publishes an event. Two downstream services react on their own — one schedules reminders,
+the other maintains an analytics read-model in Redis. Every request is traced end-to-end,
+every service emits metrics, and the whole platform ships to Kubernetes via GitOps.
+
+> **Design principle:** `application-service` is the single source of truth and the only
+> writer to PostgreSQL (database-per-service). Consumers never touch that database — they
+> react to events, and their state can be rebuilt at any time by replaying Kafka.
+
+## ✨ Features
+
+- **Full application lifecycle** — create, track, and move applications through 7 statuses (Applied → OA → Interview → Offer / Rejected / Withdrawn)
+- **Automatic reminders** — follow-ups, interview prep, and offer nudges scheduled reactively, and cancelled automatically when an application closes
+- **Live analytics** — conversion funnel with interview/offer rates, plus breakdowns by status, company, and résumé version
+- **Full observability** — metrics, logs, and distributed traces across all three services in Grafana
+- **Production deployment** — Kubernetes manifests with autoscaling, Terraform-provisioned EKS, CI/CD, and ArgoCD GitOps
+- **Resilience proven** — chaos and load scripts demonstrating self-healing and HPA scale-out
+
+## 🖼️ Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/ui-dashboard.png" alt="Dashboard"/><br/><em>Dashboard — conversion funnel and live aggregates from Redis</em></td>
+    <td width="50%"><img src="docs/screenshots/ui-reminders.png" alt="Reminders"/><br/><em>Reminders — scheduled reactively by notification-service</em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/ui-new-application.png" alt="New application"/><br/><em>Creating an application publishes a Kafka event</em></td>
+    <td width="50%"><img src="docs/screenshots/prometheus-targets.png" alt="Prometheus targets"/><br/><em>All services scraped by Prometheus</em></td>
+  </tr>
+</table>
+
+![Grafana dashboard](docs/screenshots/grafana-dashboard.png)
+<div align="center"><em>Grafana — business metrics, latency percentiles, Kafka throughput, and JVM health</em></div>
+
+## 🏗️ Architecture
 
 ```
-                     GitHub Actions CI/CD  →  ArgoCD (GitOps)  →  AWS EKS
-                                                                   │
-                              ┌────────────────────────────────────┤
-                              │                                    │
-                    application-service                            │
-                    (owns PostgreSQL, only writer)                 │
-                              │ publishes                          │
-                    ┌─────────┴──────────┐                         │
-                    ▼                    ▼                         │
-              Kafka topics:                                        │
-              - application-created                                │
-              - application-status-updated                         │
-              - application-deleted                                │
-                    │                    │                         │
-                    ▼                    ▼                         │
-        notification-service     analytics-service                 │
-        (in-memory scheduler)     (Redis: aggregates)               │
-                                                                     │
-              Observability: OpenTelemetry → Prometheus / Loki / Tempo → Grafana
+                          ┌──────────────┐
+                          │   React UI   │  :8080  (nginx serves + reverse-proxies /api)
+                          └──────┬───────┘
+                                 │ REST
+                    ┌────────────▼─────────────┐
+                    │   application-service    │  :8081
+                    │  (owns PostgreSQL —      │
+                    │   the only writer)       │
+                    └────────────┬─────────────┘
+                                 │ publishes
+              ┌──────────────────▼───────────────────┐
+              │              Kafka topics            │
+              │  application-created                 │
+              │  application-status-updated          │
+              │  application-deleted                 │
+              └────────┬────────────────────┬────────┘
+                       │ consume            │ consume
+          ┌────────────▼─────────┐  ┌───────▼──────────────┐
+          │ notification-service │  │  analytics-service   │
+          │  reminder scheduler  │  │  Redis read-model    │
+          │        :8082         │  │        :8083         │
+          └──────────────────────┘  └──────────────────────┘
+
+   Observability:  services ──OTLP──► OTel Collector ──► Tempo (traces)
+                   Prometheus ──scrape──► /actuator/prometheus  ──► Grafana
+                   container logs ──Promtail──► Loki (logs)
+
+   Delivery:  GitHub Actions ──► GHCR images ──► ArgoCD ──► AWS EKS (Terraform)
 ```
 
 A rendered diagram lives in [`docs/architecture.mermaid`](docs/architecture.mermaid).
 
-**Design principle:** `application-service` is the single source of truth and the
-only writer to PostgreSQL (database-per-service pattern). Other services never
-write application data directly — they react to Kafka events.
-
-## Tech Stack
-
-- Java 21, Spring Boot 3.3
-- PostgreSQL (via Flyway migrations), Redis
-- Apache Kafka
-- Docker, Kubernetes (Kind for local, EKS for cloud), Kustomize
-- Terraform, GitHub Actions, ArgoCD
-- OpenTelemetry, Prometheus, Grafana, Loki, Tempo (LGTM stack)
-
-## Services
+## 🧩 Services
 
 | Service | Responsibility | Data store | Port |
 |---|---|---|---|
+| `frontend` | React UI — manage applications, view reminders and analytics | — | 8080 |
 | `application-service` | CRUD for applications, publishes Kafka events | PostgreSQL | 8081 |
 | `notification-service` | Consumes events, schedules follow-up/interview/offer reminders | In-memory scheduler | 8082 |
-| `analytics-service` | Consumes events, maintains aggregates, serves read-only reporting API | Redis | 8083 |
+| `analytics-service` | Consumes events, maintains aggregates, serves reporting API | Redis | 8083 |
 
-## Local Development
+## 🛠️ Tech Stack
 
-```bash
-docker-compose up --build
-```
+**Backend** — Java 21, Spring Boot 3.3, Spring Kafka, Spring Data JPA, Flyway
+**Frontend** — React 18, Vite, Tailwind CSS, React Router, nginx
+**Data** — PostgreSQL 18, Redis 7, Apache Kafka
+**Observability** — OpenTelemetry, Micrometer, Prometheus, Grafana, Loki, Tempo
+**Platform** — Docker, Kubernetes, Kustomize, Terraform, AWS EKS, GitHub Actions, ArgoCD
 
-Starts PostgreSQL 18, Kafka, Redis, and all three services (8081/8082/8083).
+## 🚀 Quick Start
 
-PostgreSQL defaults:
-- database: `jobtracker`, user: `jobtrackeru`, password: `jobtracker1`
-- host port: `5434` (Docker only; your laptop's local PostgreSQL on `5432` stays untouched)
-
-Kafka: host `localhost:9092`, container-to-container `kafka:29092`. Redis: `localhost:6379`.
-
-### Try it (or run `./scripts/demo.sh`)
+Only **Docker Desktop** is required — the builds compile everything in containers.
 
 ```bash
-curl -X POST localhost:8081/api/v1/applications \
-  -H "Content-Type: application/json" \
-  -d '{"company":"Atidan Technologies","role":"SDE","appliedDate":"2026-07-12","resumeVersion":"java-aiml"}'
+git clone https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER.git
+cd JOB-APPLICATION-TRACKER
 
-curl localhost:8081/api/v1/applications
-curl localhost:8082/api/v1/reminders/summary
-curl localhost:8083/api/v1/analytics/summary
+# App + full observability stack
+docker compose -f docker-compose.yml -f docker-compose.observability.yml up --build
 ```
 
-## API Reference
+First run takes a few minutes. Then open:
+
+| What | URL | Login |
+|---|---|---|
+| **Web UI** | http://localhost:8080 | — |
+| **Grafana** | http://localhost:3000 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| Tempo | http://localhost:3200 | — |
+
+Want to see the whole pipeline fire at once?
+
+```bash
+./scripts/demo.sh        # creates applications, drives statuses, prints results
+./scripts/load-test.sh   # sustained load — watch the Grafana charts move
+```
+
+📖 Full setup guide, including Kubernetes and AWS: **[docs/RUNBOOK.md](docs/RUNBOOK.md)**
+
+## 📡 API Reference
 
 ### application-service
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/v1/applications` | Create a new application |
-| GET | `/api/v1/applications` | List all applications (optional `?status=` filter) |
-| GET | `/api/v1/applications/{id}` | Get a single application |
-| PATCH | `/api/v1/applications/{id}/status` | Update status (`{"status":"INTERVIEW_SCHEDULED"}`) |
-| DELETE | `/api/v1/applications/{id}` | Delete an application |
+| `POST` | `/api/v1/applications` | Create a new application |
+| `GET` | `/api/v1/applications` | List all (optional `?status=` filter) |
+| `GET` | `/api/v1/applications/{id}` | Get a single application |
+| `PATCH` | `/api/v1/applications/{id}/status` | Update status — `{"status":"INTERVIEW_SCHEDULED"}` |
+| `DELETE` | `/api/v1/applications/{id}` | Delete an application |
 
 ### analytics-service (read-only)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/v1/analytics/summary` | Total, breakdown by status, funnel + conversion rates |
-| GET | `/api/v1/analytics/by-status` | Live count of applications per status |
-| GET | `/api/v1/analytics/by-company` | Applications per company |
-| GET | `/api/v1/analytics/by-resume` | Applications per résumé version |
-| GET | `/api/v1/analytics/funnel` | Historical funnel (created → interview → offer) |
+| `GET` | `/api/v1/analytics/summary` | Totals, status breakdown, funnel + conversion rates |
+| `GET` | `/api/v1/analytics/by-status` | Live count per status |
+| `GET` | `/api/v1/analytics/by-company` | Applications per company |
+| `GET` | `/api/v1/analytics/by-resume` | Applications per résumé version |
+| `GET` | `/api/v1/analytics/funnel` | Historical funnel (created → interview → offer) |
+
+### notification-service
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/reminders` | All scheduled/triggered/cancelled reminders |
+| `GET` | `/api/v1/reminders/summary` | Reminder counts by state |
 
 All services expose `/actuator/health/{liveness,readiness}` and `/actuator/prometheus`.
 
-## Custom Metrics
+## 📊 Custom Metrics
 
-- `job_applications_total` (created counter — Prometheus strips the reserved `_created` suffix), `job_status_updates_total`
-- `application_creation_latency` (histogram, p50/p95/p99)
-- `kafka_events_published_total`, `kafka_events_publish_failed_total`
-- `notification_events_consumed_total`, `reminders_scheduled_total`, `reminders_triggered_total`
-- `analytics_events_consumed_total`, `analytics_aggregation_errors_total`
+Business metrics, not just JVM defaults:
 
-## Observability (LGTM)
+- `job_applications_total` · `job_status_updates_total`
+- `application_creation_latency` — histogram with p50/p95/p99
+- `kafka_events_published_total` · `kafka_events_publish_failed_total`
+- `notification_events_consumed_total` · `reminders_scheduled_total` · `reminders_triggered_total`
+- `analytics_events_consumed_total` · `analytics_aggregation_errors_total`
 
-Run the app stack together with the observability overlay:
+## ☸️ Kubernetes
 
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.observability.yml up --build
-```
-
-- **Grafana** — http://localhost:3000 (admin / admin) — pre-provisioned datasources
-  (Prometheus, Loki, Tempo) and a **JobTracker — Platform Overview** dashboard.
-- **Prometheus** — http://localhost:9090 · **Tempo** — http://localhost:3200
-
-<img width="1901" height="861" alt="image" src="https://github.com/user-attachments/assets/e00590ca-c2af-4f8a-bfd8-4196c25ef529" />
-<img width="1917" height="882" alt="Screenshot 2026-07-22 142452" src="https://github.com/user-attachments/assets/d7209c60-bae7-42d0-a69f-b2f86d1ed5de" />
-
-
-
-Traces are emitted via OpenTelemetry to the Collector → Tempo; logs are shipped by
-Promtail → Loki; a Grafana derived field links a log line's `traceId` to its trace.
-
-## Kubernetes
-
-Manifests use Kustomize (`infrastructure/kubernetes/base` + `overlays/{local,prod}`).
+Kustomize base with `local` (Kind) and `prod` (EKS) overlays — deployments, probes, HPA,
+ConfigMaps/Secrets, and an ALB Ingress.
 
 ```bash
-# Local Kind cluster
 kind create cluster --config infrastructure/kubernetes/overlays/local/kind-cluster.yaml
-for s in application-service notification-service analytics-service; do
+for s in application-service notification-service analytics-service frontend; do
   docker build -t $s:latest ./$s && kind load docker-image $s:latest --name jobtracker
 done
 kubectl apply -k infrastructure/kubernetes/overlays/local
 
-kubectl -n jobtracker get pods
-kubectl -n jobtracker get hpa
+./scripts/chaos.sh       # kill a pod → watch Kubernetes reschedule it
+./scripts/load-test.sh   # drive load → watch the HPA scale out
 ```
 
-Chaos & load demos:
+## ☁️ Cloud & CI/CD
 
-```bash
-./scripts/chaos.sh        # kill a pod, watch Kubernetes reschedule it
-./scripts/load-test.sh    # drive write load, watch the HPA scale out
-```
+- **Terraform** provisions a 3-AZ VPC, EKS cluster, managed node groups, and IRSA — see [`infrastructure/terraform/README.md`](infrastructure/terraform/README.md) (⚠️ billable; always `terraform destroy`).
+- **GitHub Actions** builds and tests all services on every push, then publishes images to GHCR.
+- **ArgoCD** watches the prod overlay and reconciles the cluster — see [`infrastructure/argocd/README.md`](infrastructure/argocd/README.md).
 
-
-
-
-## Cloud (AWS EKS via Terraform + ArgoCD)
-
-See [`infrastructure/terraform/README.md`](infrastructure/terraform/README.md) for
-apply steps and a **cost warning** (EKS is billable — always `terraform destroy`
-when done), and [`infrastructure/argocd/README.md`](infrastructure/argocd/README.md)
-for the GitOps setup.
-
-```bash
-cd infrastructure/terraform && terraform init && terraform apply
-aws eks update-kubeconfig --region us-east-1 --name jobtracker
-kubectl apply -f infrastructure/argocd/application.yaml   # ArgoCD then syncs the app
-```
-
-## CI/CD
-
-- **CI** (`.github/workflows/ci.yml`) — build + test + Docker build for all three services on every push/PR.
-- **CD** (`.github/workflows/cd.yml`) — publish images to GHCR, bump image tags in the prod overlay; ArgoCD reconciles the cluster.
-
-## Roadmap
+## 🗺️ Roadmap
 
 - [x] `application-service` — CRUD + PostgreSQL + Kafka producer
-- [x] `notification-service` — Kafka consumer + reminder logic
+- [x] `notification-service` — Kafka consumer + reminder scheduling
 - [x] `analytics-service` — Kafka consumer + Redis aggregates + reporting API
+- [x] React UI with nginx reverse proxy
 - [x] OpenTelemetry + Prometheus + Loki + Tempo + Grafana dashboards
-- [x] Kubernetes manifests (Kustomize, Kind local + prod overlay)
+- [x] Kubernetes manifests (Kustomize, Kind + prod overlays) with HPA
 - [x] Terraform (EKS, VPC, IAM/IRSA)
-- [x] GitHub Actions CI/CD
-- [x] ArgoCD GitOps deployment
-- [x] HPA auto-scaling
-- [x] Chaos + load test scripts (pod kill + recovery, HPA scale-out)
-- [ ] Canary deployment (Argo Rollouts) — stretch
-- [ ] Architecture screenshots + demo video
+- [x] GitHub Actions CI/CD + ArgoCD GitOps
+- [x] Chaos + load test scripts
+- [ ] Canary deployments with Argo Rollouts
+- [ ] Authentication (OIDC) and multi-user support
 
-## Author
+## 📄 License
 
-Vishal Kesarwani — [vishalkesarwani.in](https://vishalkesarwani.in) · [GitHub](https://github.com/vishal-kesharwani) · [LinkedIn](https://linkedin.com/in/vishal-kesharwani02)
+Open source under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+**Vishal Kesarwani**
+
+[![Portfolio](https://img.shields.io/badge/Portfolio-000?style=for-the-badge&logo=googlechrome&logoColor=white)](https://vishalkesarwani.in)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/vishal-kesharwani)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/vishal-kesharwani02)
+
+⭐ If you found this useful, consider starring the repo
+
+</div>
