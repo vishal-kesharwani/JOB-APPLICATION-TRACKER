@@ -71,6 +71,10 @@ different claims:
 
 This is a personal project run on local infrastructure and CI — not production traffic.
 
+📋 **New here?** [`docs/PROJECT-OVERVIEW.md`](docs/PROJECT-OVERVIEW.md) explains the
+architecture, what was actually deployed versus only written, and the notable failures behind
+each fix.
+
 ## 🖼️ Screenshots
 
 <table>
