@@ -91,6 +91,13 @@ HPAs registered, and the observability stack deployed alongside the app.
 ![Kind deployment](docs/screenshots/k8s-deployed.png)
 <div align="center"><em>Kind — the full stack deployed to Kubernetes: pods, services, deployments, StatefulSets and HPAs</em></div>
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/k8s-prometheus-targets.png" alt="Prometheus targets on Kubernetes"/><br/><em>Prometheus in-cluster — targets discovered from pod annotations, so replicas the HPA creates are scraped automatically</em></td>
+    <td width="50%"><img src="docs/screenshots/k8s-grafana-dashboard.png" alt="Grafana on Kubernetes"/><br/><em>The same dashboard, served from Grafana running inside the cluster</em></td>
+  </tr>
+</table>
+
 ## 🏗️ Architecture
 
 ```
