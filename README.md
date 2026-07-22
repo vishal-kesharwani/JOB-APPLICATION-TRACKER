@@ -49,6 +49,24 @@ every service emits metrics, and the whole platform ships to Kubernetes via GitO
 - **Production deployment** — Kubernetes manifests with autoscaling, Terraform-provisioned EKS, CI/CD, and ArgoCD GitOps
 - **Resilience proven** — chaos and load scripts demonstrating self-healing and HPA scale-out
 
+## ✅ What's actually been run
+
+Being explicit, because "I wrote a Terraform file" and "I provisioned a cluster" are
+different claims:
+
+| Component | Status |
+|---|---|
+| 3 microservices + React UI, Kafka, PostgreSQL, Redis | ✅ Running — screenshots below |
+| Prometheus / Grafana / Loki / Tempo + OpenTelemetry tracing | ✅ Running — dashboards and traces verified |
+| GitHub Actions CI/CD → images published to GHCR | ✅ Running — green pipeline, packages published |
+| Kubernetes (Kind) — full stack deployed, liveness/readiness/startup probes green | ✅ Deployed — see [DEPLOY-TESTING.md](docs/DEPLOY-TESTING.md) |
+| In-cluster Prometheus + Grafana + OTel Collector, metrics scraped via pod annotations | ✅ Deployed — all scrape targets up, dashboard live |
+| Kubernetes HPA scale-out and self-healing under pod failure | ⬜ Not yet verified — needs metrics-server |
+| ArgoCD GitOps | ⬜ Manifests written |
+| AWS EKS via Terraform | ⬜ IaC written and validated; not provisioned |
+
+This is a personal project run on local infrastructure and CI — not production traffic.
+
 ## 🖼️ Screenshots
 
 <table>
@@ -64,6 +82,14 @@ every service emits metrics, and the whole platform ships to Kubernetes via GitO
 
 ![Grafana dashboard](docs/screenshots/grafana-dashboard.png)
 <div align="center"><em>Grafana — business metrics, latency percentiles, Kafka throughput, and JVM health</em></div>
+
+### ☸️ Running on Kubernetes (Kind)
+
+Not manifests — an actual cluster. Every pod `1/1 Running`, Kafka in KRaft mode,
+HPAs registered, and the observability stack deployed alongside the app.
+
+![Kind deployment](docs/screenshots/k8s-deployed.png)
+<div align="center"><em>Kind — the full stack deployed to Kubernetes: pods, services, deployments, StatefulSets and HPAs</em></div>
 
 ## 🏗️ Architecture
 
