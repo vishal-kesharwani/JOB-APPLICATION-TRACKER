@@ -117,6 +117,15 @@ and fix.
 ![Chaos recovery](docs/screenshots/chaos-recovery.png)
 <div align="center"><em>Recovered to 1/1 with 0 restarts in ~3 minutes. The <code>SuccessfulCreate</code> event shows the ReplicaSet acted on its own — and the failing startup probe below it is the container being <strong>allowed</strong> to boot rather than killed</em></div>
 
+### 🔄 GitOps with ArgoCD
+
+The cluster syncs itself from this repository. A commit pushed to `main` at 02:51 changed the
+running cluster at **02:54:30** — no `kubectl` was involved. The ~3m30s gap is ArgoCD's default
+polling interval; GitOps converges on Git rather than tracking it instantly.
+
+![ArgoCD synced](docs/screenshots/argocd-synced.png)
+<div align="center"><em>ArgoCD — 23 resources Synced / 0 OutOfSync, 37 Healthy / 0 Degraded, auto-sync enabled against <code>main</code>. Reaching 0 OutOfSync required telling ArgoCD not to own <code>/spec/replicas</code>, since the HPA does — <a href="docs/KIND-DEPLOYMENT-LOG.md#bug-11--argocd-and-the-hpa-fought-over-replica-counts">the conflict is documented here</a></em></div>
+
 ## 🏗️ Architecture
 
 ```
