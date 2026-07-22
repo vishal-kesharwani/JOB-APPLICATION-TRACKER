@@ -152,6 +152,9 @@ Chaos & load demos:
 ./scripts/load-test.sh    # drive write load, watch the HPA scale out
 ```
 
+<img width="1901" height="861" alt="image" src="https://github.com/user-attachments/assets/e00590ca-c2af-4f8a-bfd8-4196c25ef529" />
+
+
 ## Cloud (AWS EKS via Terraform + ArgoCD)
 
 See [`infrastructure/terraform/README.md`](infrastructure/terraform/README.md) for
