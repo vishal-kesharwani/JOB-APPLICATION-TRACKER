@@ -26,7 +26,10 @@ Thumbs.db
 crash.log
 *.tfvars
 !*.tfvars.example
-.terraform.lock.hcl
+# .terraform.lock.hcl is deliberately NOT ignored. HashiCorp's guidance is to
+# commit it: it pins provider versions and their checksums, so `terraform init`
+# resolves identically on another machine or in CI. Ignoring it means two people
+# running the same config can get different providers.
 
 # Env files
 .env

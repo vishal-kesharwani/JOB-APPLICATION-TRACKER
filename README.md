@@ -67,7 +67,7 @@ different claims:
 | Self-healing — pod deleted, replacement scheduled in 32s and Ready in ~3 min | ✅ Verified |
 | HPA scale-out under load — metrics-server installed, `application-service` 1→2 replicas | ⚠️ Partial — see [the deployment log](docs/KIND-DEPLOYMENT-LOG.md#load-test--what-was-and-was-not-proven) for why a sustained climb isn't reachable on 4 CPUs |
 | ArgoCD GitOps — 23 resources Synced / 0 OutOfSync, auto-sync from `main` | ✅ Running — a commit pushed to Git reconciled into the cluster ~3m30s later, with no `kubectl` |
-| AWS EKS via Terraform | ⬜ IaC written and validated; not provisioned |
+| AWS EKS via Terraform | ⬜ `init` + `validate` pass ("the configuration is valid"); `plan` needs AWS credentials, and nothing was provisioned — see [the log](docs/KIND-DEPLOYMENT-LOG.md#phase-3--aws-eks-via-terraform-not-provisioned) |
 
 This is a personal project run on local infrastructure and CI — not production traffic.
 

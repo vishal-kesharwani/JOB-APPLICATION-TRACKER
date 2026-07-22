@@ -669,6 +669,51 @@ knowing: in this repo the deployed revision is never quite the commit you pushed
 
 ---
 
+## Phase 3 — AWS EKS via Terraform (not provisioned)
+
+Terraform v1.15.8. Everything free was run; nothing was applied, so **no AWS resources were
+created and nothing was billed**.
+
+```
+terraform init      ✅ providers installed (aws, kubernetes, helm, tls, time, cloudinit, null)
+terraform validate  ✅ Success! The configuration is valid.
+terraform fmt       ✅ (main.tf was unformatted; fixed)
+terraform plan      ❌ Error: No valid credential sources found
+terraform apply     — not attempted
+```
+
+`plan` is the checkpoint that produces a resource count, and it cannot run here:
+
+```
+Error: No valid credential sources found
+  with provider["registry.terraform.io/hashicorp/aws"],
+  on versions.tf line 22, in provider "aws"
+
+Error: failed to refresh cached credentials, no EC2 IMDS role found ...
+dial tcp 169.254.169.254:80: A socket operation was attempted to an
+unreachable network.
+```
+
+`plan` is not an offline operation. It authenticates to AWS and refreshes state to compare
+desired against actual, so without credentials it stops before producing a diff. `validate`
+*is* offline — it checks syntax, types and references only. The distinction matters when
+claiming what has been verified: **valid configuration is not the same as a working plan.**
+
+`.terraform.lock.hcl` was being gitignored, which is backwards — HashiCorp recommends
+committing it so provider versions and checksums resolve identically elsewhere. Now tracked.
+
+### What this phase does and does not establish
+
+Established: the configuration parses, type-checks, and its provider requirements resolve.
+
+Not established: that it would successfully provision, that the resource graph is correct,
+or that the VPC/IRSA/node-group wiring works. Those need `plan` at minimum and `apply` to be
+sure. Cost was the reason to stop — roughly $0.10/hr for the EKS control plane plus ~$0.17/hr
+for two t3.large nodes plus NAT gateway, so ~$2–5 for a short session and ~$230/month if left
+running.
+
+---
+
 ## Summary
 
 | # | Bug | Root cause | Visible in Compose? |
@@ -700,6 +745,9 @@ Nine of eleven could only appear on Kubernetes.
 | Observability in-cluster | ✅ metrics; ❌ tracing backend (memory) |
 | 2. ArgoCD installed and syncing | ✅ 23 Synced / 0 OutOfSync, 37 Healthy |
 | 2. GitOps reconciliation from Git | ✅ push at 02:51 → cluster changed 02:54:30, no kubectl |
+| 3. Terraform `init` + `validate` | ✅ "Success! The configuration is valid." |
+| 3. Terraform `plan` | ❌ needs AWS credentials — not configured |
+| 3. EKS provisioned | ❌ not attempted — costs money |
 
 ### What can honestly be claimed
 
