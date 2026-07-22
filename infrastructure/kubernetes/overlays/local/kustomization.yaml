@@ -39,6 +39,12 @@ patches:
         value: IfNotPresent
 
   # --- Trim resource requests to fit a laptop -----------------------------
+  #
+  # CPU requests are 250m rather than the 75-100m these pods would "fit" in.
+  # HPA utilisation is measured against the request, and an idle Spring Boot
+  # JVM sits around 110-130m: with a 75m request that is 150%+ of target, so
+  # the autoscaler scales out at rest and never scales back. Requests must
+  # reflect actual idle cost, or the HPA is measuring against a fiction.
   - target:
       kind: Deployment
       name: application-service
@@ -46,7 +52,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources
         value:
-          requests: { cpu: "100m", memory: "256Mi" }
+          requests: { cpu: "250m", memory: "256Mi" }
           limits: { cpu: "1", memory: "512Mi" }
 
   - target:
@@ -56,7 +62,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources
         value:
-          requests: { cpu: "75m", memory: "224Mi" }
+          requests: { cpu: "250m", memory: "224Mi" }
           limits: { cpu: "500m", memory: "448Mi" }
 
   - target:
@@ -66,7 +72,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources
         value:
-          requests: { cpu: "75m", memory: "224Mi" }
+          requests: { cpu: "250m", memory: "224Mi" }
           limits: { cpu: "500m", memory: "448Mi" }
 
   - target:
