@@ -21,6 +21,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: jobtracker
+  # Deployments here are scaled by a HorizontalPodAutoscaler, so their replica
+  # count is owned by the cluster at runtime, not by Git. Without this, ArgoCD
+  # and the HPA fight forever: the HPA scales up, selfHeal reverts to the value
+  # in Git, the HPA scales up again, and the app never leaves OutOfSync.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
   syncPolicy:
     automated:
       prune: true

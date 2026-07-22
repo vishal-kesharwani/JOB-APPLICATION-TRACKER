@@ -106,3 +106,17 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 3
+
+  # The frontend HPA's minReplicas of 2 contradicted the single replica this
+  # overlay asks for, so the two controllers pulled in opposite directions
+  # permanently. One replica of nginx is plenty locally.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: frontend
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
