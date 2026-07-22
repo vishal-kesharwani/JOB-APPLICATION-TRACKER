@@ -1,0 +1,162 @@
+# Prometheus.
+#
+# Unlike the Compose config (static_configs pointing at fixed hostnames), this
+# uses Kubernetes service discovery driven by the prometheus.io/* annotations
+# already present on the app pods. That means pods the HPA creates during a
+# scale-out are scraped automatically, with no config change — which is the
+# whole reason annotation-based discovery is the norm on Kubernetes.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: jobtracker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-jobtracker
+rules:
+  - apiGroups: [""]
+    resources: [nodes, nodes/metrics, services, endpoints, pods]
+    verbs: [get, list, watch]
+  - nonResourceURLs: ["/metrics"]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-jobtracker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-jobtracker
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: jobtracker
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: jobtracker
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        stack: jobtracker
+
+    scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [jobtracker]
+        relabel_configs:
+          # Only scrape pods that opt in with prometheus.io/scrape: "true".
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # Honour prometheus.io/path (default /metrics).
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Rewrite the address to the port named in prometheus.io/port.
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Carry pod/app identity through as labels so dashboards can group.
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: service
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          # Overwrite the job label with the app name. Service discovery would
+          # otherwise label every target job="kubernetes-pods", whereas the
+          # Compose setup gives each service its own job. The shared Grafana
+          # dashboard queries up{job=~".*-service"}, so matching the Compose
+          # convention lets the same dashboard JSON work in both environments.
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: job
+
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: jobtracker
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: jobtracker
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            # Short retention: this is a demo cluster on emptyDir, not a
+            # long-term metrics store.
+            - "--storage.tsdb.retention.time=2h"
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            periodSeconds: 15
+            timeoutSeconds: 3
+          resources:
+            requests: { cpu: "75m", memory: "192Mi" }
+            limits: { cpu: "500m", memory: "384Mi" }
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}

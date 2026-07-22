@@ -1,0 +1,128 @@
+# OpenTelemetry Collector.
+#
+# The app services already point OTEL_EXPORTER_OTLP_ENDPOINT at
+# http://otel-collector:4318/v1/traces, so without this the endpoint does not
+# resolve and trace export fails silently in the background.
+#
+# Differs from the Compose config in one way: there is no Tempo in the cluster
+# (it does not fit in the memory this laptop can give Docker), so traces go to
+# the debug exporter rather than otlp/tempo. Metrics still land in Prometheus.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: jobtracker
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 2s
+        send_batch_size: 512
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+
+    exporters:
+      debug:
+        verbosity: basic
+      prometheus:
+        endpoint: 0.0.0.0:8889
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: jobtracker
+  labels:
+    app: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: metrics
+      port: 8889
+      targetPort: 8889
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: jobtracker
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8889"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.109.0
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+            - containerPort: 8889
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 15
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests: { cpu: "50m", memory: "96Mi" }
+            limits: { cpu: "300m", memory: "192Mi" }
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config

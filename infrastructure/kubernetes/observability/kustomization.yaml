@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Optional observability add-on, applied separately from the app stack:
+#
+#   kubectl apply -k infrastructure/kubernetes/observability
+#
+# Kept out of the base overlay deliberately. It is roughly 600 Mi of extra
+# requests, which is the difference between fitting and not fitting on a laptop
+# that can only give Docker ~4.5 GB. Apply it when you want dashboards; delete
+# it when you need the memory back.
+#
+# Scope: OTel Collector + Prometheus + Grafana only. Tempo and Loki stay in
+# docker-compose.observability.yml — see the note in otel-collector.yaml.
+namespace: jobtracker
+
+resources:
+  - otel-collector.yaml
+  - prometheus.yaml
+  - grafana.yaml
