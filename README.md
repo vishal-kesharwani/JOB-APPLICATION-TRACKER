@@ -66,7 +66,7 @@ different claims:
 | In-cluster Prometheus + Grafana + OTel Collector, metrics scraped via pod annotations | ✅ Deployed — all scrape targets up, dashboard live |
 | Self-healing — pod deleted, replacement scheduled in 32s and Ready in ~3 min | ✅ Verified |
 | HPA scale-out under load — metrics-server installed, `application-service` 1→2 replicas | ⚠️ Partial — see [the deployment log](docs/KIND-DEPLOYMENT-LOG.md#load-test--what-was-and-was-not-proven) for why a sustained climb isn't reachable on 4 CPUs |
-| ArgoCD GitOps | ⬜ Manifests written |
+| ArgoCD GitOps — 23 resources Synced / 0 OutOfSync, auto-sync from `main` | ✅ Running — a commit pushed to Git reconciled into the cluster ~3m30s later, with no `kubectl` |
 | AWS EKS via Terraform | ⬜ IaC written and validated; not provisioned |
 
 This is a personal project run on local infrastructure and CI — not production traffic.

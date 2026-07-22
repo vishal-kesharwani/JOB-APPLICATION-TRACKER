@@ -557,6 +557,118 @@ environment, not of the manifests.
 
 ---
 
+## Phase 2 — ArgoCD GitOps
+
+### Install
+
+Three images are referenced by `install.yaml`. Dex was skipped entirely (SSO only) and its
+Deployment scaled to 0, along with the notifications and applicationset controllers, to
+protect memory. The other two were side-loaded as archives, for the IPv6 reason above:
+
+| Image | Archive | On node |
+|---|---|---|
+| `quay.io/argoproj/argocd:v3.4.5` | 193,763,840 bytes | 194 MB |
+| `public.ecr.aws/docker/library/redis:8.2.3-alpine` | 28,016,640 bytes | 27.5 MB |
+
+---
+
+#### Bug 10 — `kubectl apply` cannot install ArgoCD
+
+```
+The CustomResourceDefinition "applicationsets.argoproj.io" is invalid:
+metadata.annotations: Too long: may not be more than 262144 bytes
+```
+
+**Diagnosis.** Client-side `kubectl apply` stores the entire manifest in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation. The ApplicationSet CRD is
+larger than the 256 KB annotation limit, so the object cannot be written at all.
+
+**Fix.** Server-side apply, which tracks field ownership in managed fields instead of
+stuffing a copy into an annotation:
+
+```bash
+kubectl apply --server-side=true --force-conflicts -n argocd -f install.yaml
+```
+
+Four pods reached `1/1 Running` in **114 seconds**: `application-controller`, `repo-server`,
+`server`, `redis`.
+
+> **Learning.** Client-side apply has a hard size ceiling that large CRDs routinely exceed.
+> Server-side apply is not merely newer, it is the only thing that works here.
+
+---
+
+#### Bug 11 — ArgoCD and the HPA fought over replica counts
+
+Within a minute of applying the Application, it settled into a permanent flap:
+
+```
+02:47:21  Synced   | Healthy
+02:48:04  OutOfSync| Progressing
+02:49:12  OutOfSync| Healthy
+```
+
+The single drifting resource:
+
+```
+Deployment/frontend -> OutOfSync
+```
+
+**Diagnosis.** Two controllers claimed the same field. Git asked for 1 frontend replica; the
+frontend HPA had `minReplicas: 2` and set 2; ArgoCD's `selfHeal` reverted it to 1; the HPA
+set it back. Neither is malfunctioning — they were given contradictory authority over
+`/spec/replicas`.
+
+**Fix, in two parts, because there were two problems.**
+
+1. ArgoCD should not own replica counts of HPA-managed Deployments:
+
+```yaml
+ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+      - /spec/replicas
+```
+
+2. The overlay was *itself* contradictory — asking for 1 frontend replica while leaving that
+   HPA at `minReplicas: 2`. That conflict existed with or without ArgoCD; ArgoCD just made it
+   visible. The overlay now patches the frontend HPA to 1/3 like the others.
+
+Result: **23 Synced / 0 OutOfSync, 37 Healthy / 0 Degraded.**
+
+> **Learning.** GitOps forces you to name the owner of every field. Anything mutated at
+> runtime — replica counts, injected secrets, admission-webhook defaults — needs an explicit
+> `ignoreDifferences` or the reconciler will fight the thing doing the mutating. The
+> contradiction had been sitting in the overlay all along; nothing before ArgoCD surfaced it.
+
+---
+
+### The GitOps demonstration
+
+The fix above was itself the demo. A commit was pushed to GitHub and **nothing was applied to
+the cluster by hand**:
+
+```
+02:51:00  git push origin main       frontend HPA: minReplicas 2, maxReplicas 5
+02:54:30  (no kubectl run)           frontend HPA: minReplicas 1, maxReplicas 3
+```
+
+**Reconciliation lag: ~3m30s**, consistent with ArgoCD's default 3-minute polling interval.
+The ArgoCD UI records the same event independently: `Sync OK ... Succeeded (Thu Jul 23 2026
+02:54:26 GMT+0530)`.
+
+The revision it synced is authored by `github-actions[bot]` with the message
+`ci: deploy d7f38b4…` — the CD pipeline commits on top of pushes, so ArgoCD is reconciling
+against the pipeline's output rather than the hand-written commit directly. That is worth
+knowing: in this repo the deployed revision is never quite the commit you pushed.
+
+> **Learning.** The lag is the honest part. GitOps is eventually consistent by design — the
+> cluster converges on Git, it does not track it instantly. A demo that hides the interval
+> misrepresents how the tool behaves.
+
+---
+
 ## Summary
 
 | # | Bug | Root cause | Visible in Compose? |
@@ -570,8 +682,10 @@ environment, not of the manifests.
 | 7 | Dashboard panel empty | Different `job` labels under SD | **No** |
 | 8 | HPA scales at idle | CPU requests below idle usage | **No** |
 | 9 | Grafana restart loop | Bug 6 not applied to new workloads | **No** |
+| 10 | ArgoCD install rejected | CRD exceeds 256 KB annotation limit | **No** |
+| 11 | Permanent OutOfSync | ArgoCD and HPA both own `/spec/replicas` | **No** |
 
-Seven of nine could only appear on Kubernetes.
+Nine of eleven could only appear on Kubernetes.
 
 ### Status
 
@@ -584,12 +698,16 @@ Seven of nine could only appear on Kubernetes.
 | 1.5 Self-healing under pod deletion | ✅ replacement in 32s, ready in ~3m |
 | 1.6 HPA scale-out under load | ⚠️ partial — 1→2 verified; sustained climb not achievable on this hardware |
 | Observability in-cluster | ✅ metrics; ❌ tracing backend (memory) |
+| 2. ArgoCD installed and syncing | ✅ 23 Synced / 0 OutOfSync, 37 Healthy |
+| 2. GitOps reconciliation from Git | ✅ push at 02:51 → cluster changed 02:54:30, no kubectl |
 
 ### What can honestly be claimed
 
 > Deployed to Kubernetes (kind) with liveness, readiness and startup probes; verified
 > self-healing under pod failure and HPA scale-out under load (1→2 replicas), with
 > Prometheus and Grafana running in-cluster and metrics scraped via pod annotations.
+> Delivered via ArgoCD GitOps, with a change pushed to Git reconciled into the cluster
+> automatically.
 
 What is **not** claimed: production experience, throughput numbers, or a sustained autoscaling
 demonstration. Being precise about the boundary is the point of this document.
