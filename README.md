@@ -64,7 +64,8 @@ different claims:
 | GitHub Actions CI/CD → images published to GHCR | ✅ Running — green pipeline, packages published |
 | Kubernetes (Kind) — full stack deployed, liveness/readiness/startup probes green | ✅ Deployed — see [DEPLOY-TESTING.md](docs/DEPLOY-TESTING.md) |
 | In-cluster Prometheus + Grafana + OTel Collector, metrics scraped via pod annotations | ✅ Deployed — all scrape targets up, dashboard live |
-| Kubernetes HPA scale-out and self-healing under pod failure | ⬜ Not yet verified — needs metrics-server |
+| Self-healing — pod deleted, replacement scheduled in 32s and Ready in ~3 min | ✅ Verified |
+| HPA scale-out under load — metrics-server installed, `application-service` 1→2 replicas | ⚠️ Partial — see [the deployment log](docs/KIND-DEPLOYMENT-LOG.md#load-test--what-was-and-was-not-proven) for why a sustained climb isn't reachable on 4 CPUs |
 | ArgoCD GitOps | ⬜ Manifests written |
 | AWS EKS via Terraform | ⬜ IaC written and validated; not provisioned |
 
@@ -90,6 +91,13 @@ This is a personal project run on local infrastructure and CI — not production
 
 Not manifests — an actual cluster. Every pod `1/1 Running`, Kafka in KRaft mode,
 HPAs registered, and the observability stack deployed alongside the app.
+
+Getting there took nine distinct bugs, seven of which cannot occur under Docker Compose —
+Kubernetes injecting service env vars that corrupted the Kafka broker config, a KRaft
+controller hairpinning through its own ClusterIP, liveness probes killing JVMs mid-boot, and
+an HPA that scaled out at idle because CPU requests were below idle usage.
+**[The full engineering log](docs/KIND-DEPLOYMENT-LOG.md)** documents every failure, command
+and fix.
 
 ![Kind deployment](docs/screenshots/k8s-deployed.png)
 <div align="center"><em>Kind — the full stack deployed to Kubernetes: pods, services, deployments, StatefulSets and HPAs</em></div>
