@@ -256,20 +256,40 @@ ConfigMaps/Secrets, and an ALB Ingress.
 
 ```bash
 kind create cluster --config infrastructure/kubernetes/overlays/local/kind-cluster.yaml
+
+# locally built images side-load directly
 for s in application-service notification-service analytics-service frontend; do
   docker build -t $s:latest ./$s && kind load docker-image $s:latest --name jobtracker
 done
+
+# registry images need a single-platform archive — `kind load docker-image` fails
+# on a multi-platform manifest with "content digest ...: not found"
+docker pull --platform linux/amd64 confluentinc/cp-kafka:7.6.1
+docker save --platform linux/amd64 -o cp-kafka.tar confluentinc/cp-kafka:7.6.1
+kind load image-archive cp-kafka.tar --name jobtracker
+
 kubectl apply -k infrastructure/kubernetes/overlays/local
+kubectl -n jobtracker get pods -w
 
 ./scripts/chaos.sh       # kill a pod → watch Kubernetes reschedule it
 ./scripts/load-test.sh   # drive load → watch the HPA scale out
 ```
 
+Optional in-cluster metrics (~600 Mi — skip it if Docker has under 6 GB):
+
+```bash
+kubectl apply -k infrastructure/kubernetes/observability
+kubectl -n jobtracker port-forward svc/grafana 3000:3000     # admin / admin
+```
+
+📖 Every command verified, with the failures they produce and why:
+**[docs/DEPLOY-TESTING.md](docs/DEPLOY-TESTING.md)** · **[docs/KIND-DEPLOYMENT-LOG.md](docs/KIND-DEPLOYMENT-LOG.md)**
+
 ## ☁️ Cloud & CI/CD
 
 - **Terraform** provisions a 3-AZ VPC, EKS cluster, managed node groups, and IRSA — see [`infrastructure/terraform/README.md`](infrastructure/terraform/README.md) (⚠️ billable; always `terraform destroy`).
 - **GitHub Actions** builds and tests all services on every push, then publishes images to GHCR.
-- **ArgoCD** watches the prod overlay and reconciles the cluster — see [`infrastructure/argocd/README.md`](infrastructure/argocd/README.md).
+- **ArgoCD** watches this repo and reconciles the cluster to match Git (~3 min polling interval) — see [`infrastructure/argocd/README.md`](infrastructure/argocd/README.md).
 
 ## 🗺️ Roadmap
 

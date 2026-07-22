@@ -114,20 +114,35 @@ Stop the same way: `Ctrl-C`, then
 Run the platform in a real Kubernetes cluster on your laptop.
 
 ```bash
-# 1. Create the cluster
+# 1. Create the cluster (single node — see DEPLOY-TESTING.md for why)
 kind create cluster --config infrastructure/kubernetes/overlays/local/kind-cluster.yaml
 
-# 2. Build the three images and load them into the Kind nodes
-for s in application-service notification-service analytics-service; do
+# 2. Build the four images and load them into the Kind node (~30 min first run)
+for s in application-service notification-service analytics-service frontend; do
   docker build -t $s:latest ./$s
   kind load docker-image $s:latest --name jobtracker
 done
 
-# 3. Deploy everything (Postgres, Kafka, Redis, and the 3 services)
+# 3. Side-load Kafka. `kind load docker-image` fails here with
+#    "content digest ...: not found" — Docker's containerd store holds a
+#    multi-platform manifest whose non-amd64 blobs were never pulled.
+docker pull --platform linux/amd64 confluentinc/cp-kafka:7.6.1
+docker save --platform linux/amd64 -o cp-kafka.tar confluentinc/cp-kafka:7.6.1
+kind load image-archive cp-kafka.tar --name jobtracker
+
+# 4. Deploy everything (Postgres, Kafka, Redis, the 3 services, the UI)
 kubectl apply -k infrastructure/kubernetes/overlays/local
 
-# 4. Watch it come up (Kafka/Postgres take ~1-2 min)
+# 5. Watch it come up. Postgres/Kafka ~1-2 min; the JVMs take 2-5 min and are
+#    allowed up to 5 by their startup probes.
 kubectl -n jobtracker get pods -w
+```
+
+Confirm you are on the right cluster if anything looks missing — Docker Desktop's built-in
+Kubernetes will quietly take the current context if it is enabled:
+
+```bash
+kubectl config current-context      # expect kind-jobtracker
 ```
 
 Once pods are `Running` and `Ready`, reach a service with port-forward:
@@ -141,13 +156,34 @@ curl localhost:8081/api/v1/applications
 Autoscaling requires the metrics-server (Kind doesn't ship it):
 
 ```bash
+# side-load the image first (same reason as Kafka above)
+docker pull --platform linux/amd64 registry.k8s.io/metrics-server/metrics-server:v0.9.0
+docker save --platform linux/amd64 -o ms.tar registry.k8s.io/metrics-server/metrics-server:v0.9.0
+kind load image-archive ms.tar --name jobtracker
+
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# --kubelet-insecure-tls is required on Kind: the kubelet's serving cert is not
+# signed by the cluster CA, so metrics-server refuses to scrape it.
 kubectl patch -n kube-system deployment metrics-server --type=json \
   -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+kubectl -n kube-system rollout status deployment/metrics-server
 
+kubectl top pods -n jobtracker  # metrics flowing before trusting the HPA
 kubectl -n jobtracker get hpa
-./scripts/load-test.sh          # drive load, watch replicas grow
 ./scripts/chaos.sh              # kill a pod, watch Kubernetes replace it
+./scripts/load-test.sh          # drive load, watch replicas grow
+```
+
+> On a 4-CPU machine the load generator competes with the Kubernetes control plane and can
+> starve it — `TLS handshake timeout`, frozen HPA metrics, evicted pods. Run load against a
+> trimmed-down cluster, or accept a smaller scale-out. Details in
+> [DEPLOY-TESTING.md](DEPLOY-TESTING.md#16-prove-autoscaling-hpa).
+
+Optional in-cluster metrics stack (~600 Mi):
+
+```bash
+kubectl apply -k infrastructure/kubernetes/observability
+kubectl -n jobtracker port-forward svc/grafana 3000:3000     # admin / admin
 ```
 
 **Tear down:** `kind delete cluster --name jobtracker`.
@@ -162,13 +198,19 @@ kubectl -n jobtracker get hpa
 > `infrastructure/terraform/README.md`.
 
 ```bash
-# 1. Authenticate to AWS
-aws configure          # or aws sso login
-
-# 2. Provision the cluster (~15-20 min)
+# 0. Free, and needs no AWS account: check the config is well-formed.
+#    `validate` is offline — passing it does NOT mean it would provision.
 cd infrastructure/terraform
 cp terraform.tfvars.example terraform.tfvars     # edit region etc. if you like
 terraform init
+terraform validate        # "Success! The configuration is valid."
+
+# 1. Authenticate to AWS. `plan` refreshes state against the API, so without
+#    credentials it stops at "No valid credential sources found".
+aws configure          # or aws sso login
+terraform plan
+
+# 2. Provision the cluster (~15-20 min) — billing starts here
 terraform apply
 
 # 3. Point kubectl at the new cluster (this exact command is a terraform output)
@@ -179,9 +221,12 @@ aws eks update-kubeconfig --region us-east-1 --name jobtracker
 #      make sure images are pushed to GHCR by the CD pipeline)
 kubectl apply -k ../kubernetes/overlays/prod
 
-# 4b. ...or via GitOps with ArgoCD (see infrastructure/argocd/README.md)
+# 4b. ...or via GitOps with ArgoCD (see infrastructure/argocd/README.md).
+#     --server-side is required: the ApplicationSet CRD exceeds the 256 KB
+#     annotation limit that client-side apply uses, and is rejected outright.
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply --server-side=true --force-conflicts -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 kubectl apply -f ../argocd/application.yaml
 ```
 
@@ -213,6 +258,13 @@ No secrets needed for CI. CD uses the built-in `GITHUB_TOKEN` to push to GHCR
 | A service exits/restarts on boot | It waits for Kafka/Postgres. Give it 1–2 min; Compose healthchecks gate startup. |
 | `port is already allocated` | Something else uses 8081/5434/6379/3000. Stop it or change the host port in the compose file. |
 | `docker-compose: command not found` | Use `docker compose` (with a space). |
-| Kind pods stuck `ImagePullBackOff` | You skipped `kind load docker-image` (step 2), or edited an image name. Re-run step 2. |
+| Kind pods stuck `ImagePullBackOff` | Image never reached the node. Check with `docker exec jobtracker-control-plane crictl images`. Re-run the load step. |
+| `kind load` fails: `content digest ...: not found` | Multi-platform manifest with missing blobs. Use `docker save --platform linux/amd64` + `kind load image-archive`. |
+| Kind pod `Exit Code: 143` with empty logs | Killed by its liveness probe during startup, so it never logged why. |
+| `kubectl`: `No resources found` but the cluster is fine | Wrong context — `kubectl config use-context kind-jobtracker`. |
+| HPA scaling up with no traffic | CPU requests below idle usage; utilisation is a percentage of the *request*. |
+| `kubectl`: `TLS handshake timeout` | Control-plane starvation. Reduce load, then `docker restart jobtracker-control-plane`. |
+| ArgoCD install: `Too long: may not be more than 262144 bytes` | Use `kubectl apply --server-side=true`. |
+| One Deployment stuck `OutOfSync` in ArgoCD | ArgoCD and the HPA both own `/spec/replicas`; needs `ignoreDifferences`. |
 | `analytics-service` summary all zeros | No events yet — create an application first (`./scripts/demo.sh`). |
 | HPA shows `<unknown>` targets | metrics-server isn't installed/ready (Level 3 note above). |
