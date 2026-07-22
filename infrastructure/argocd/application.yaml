@@ -11,9 +11,13 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/GHCR_OWNER/application-tracker.git
+    repoURL: https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER.git
     targetRevision: main
-    path: infrastructure/kubernetes/overlays/prod
+    # The local overlay, not prod: the prod overlay pulls images from GHCR, and
+    # a Kind node has no registry pull secret (and, here, no working route to a
+    # registry at all). Pointing a local cluster at prod produces a permanently
+    # degraded app that proves nothing about GitOps.
+    path: infrastructure/kubernetes/overlays/local
   destination:
     server: https://kubernetes.default.svc
     namespace: jobtracker

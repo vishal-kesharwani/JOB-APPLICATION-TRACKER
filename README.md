@@ -109,6 +109,9 @@ and fix.
   </tr>
 </table>
 
+![Chaos recovery](docs/screenshots/chaos-recovery.png)
+<div align="center"><em>Self-healing — a deleted pod is replaced by the ReplicaSet within 32 seconds and passes readiness ~3 minutes later, unprompted</em></div>
+
 ## 🏗️ Architecture
 
 ```
