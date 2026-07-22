@@ -126,6 +126,11 @@ docker-compose -f docker-compose.yml -f docker-compose.observability.yml up --bu
   (Prometheus, Loki, Tempo) and a **JobTracker — Platform Overview** dashboard.
 - **Prometheus** — http://localhost:9090 · **Tempo** — http://localhost:3200
 
+<img width="1901" height="861" alt="image" src="https://github.com/user-attachments/assets/e00590ca-c2af-4f8a-bfd8-4196c25ef529" />
+<img width="1917" height="882" alt="Screenshot 2026-07-22 142452" src="https://github.com/user-attachments/assets/d7209c60-bae7-42d0-a69f-b2f86d1ed5de" />
+
+
+
 Traces are emitted via OpenTelemetry to the Collector → Tempo; logs are shipped by
 Promtail → Loki; a Grafana derived field links a log line's `traceId` to its trace.
 
@@ -152,7 +157,7 @@ Chaos & load demos:
 ./scripts/load-test.sh    # drive write load, watch the HPA scale out
 ```
 
-<img width="1901" height="861" alt="image" src="https://github.com/user-attachments/assets/e00590ca-c2af-4f8a-bfd8-4196c25ef529" />
+
 
 
 ## Cloud (AWS EKS via Terraform + ArgoCD)
