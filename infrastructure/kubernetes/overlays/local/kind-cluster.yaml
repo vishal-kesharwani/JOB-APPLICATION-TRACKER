@@ -1,0 +1,16 @@
+# Create with:  kind create cluster --name jobtracker --config kind-cluster.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: jobtracker
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Expose application-service via NodePort 30081 -> localhost:8081
+      - containerPort: 30081
+        hostPort: 8081
+        protocol: TCP
+      - containerPort: 30083
+        hostPort: 8083
+        protocol: TCP
+  - role: worker
+  - role: worker

@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-service-config
+  namespace: jobtracker
+data:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  FOLLOW_UP_REMINDER_DELAY: 10m
+  INTERVIEW_PREP_REMINDER_DELAY: 5m
+  OFFER_FOLLOW_UP_REMINDER_DELAY: 15m
+  NOTIFICATION_SCHEDULER_POOL_SIZE: "2"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+  TRACING_SAMPLING_PROBABILITY: "0.1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: jobtracker
+  labels:
+    app: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: jobtracker
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: /actuator/prometheus
+    spec:
+      containers:
+        - name: notification-service
+          image: notification-service:latest
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: notification-service-config
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8082
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "200m", memory: "384Mi" }
+            limits: { cpu: "750m", memory: "640Mi" }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: notification-service
+  namespace: jobtracker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: notification-service
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75

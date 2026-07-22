@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Production (EKS) overlay. Images come from GHCR; the CD pipeline / ArgoCD image
+# updater rewrites the tags. Replace GHCR_OWNER with your GitHub org/user.
+resources:
+  - ../../base
+  - ingress.yaml
+
+images:
+  - name: application-service
+    newName: ghcr.io/GHCR_OWNER/application-service
+    newTag: latest
+  - name: notification-service
+    newName: ghcr.io/GHCR_OWNER/notification-service
+    newTag: latest
+  - name: analytics-service
+    newName: ghcr.io/GHCR_OWNER/analytics-service
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: application-service
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3

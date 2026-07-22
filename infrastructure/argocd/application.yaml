@@ -1,0 +1,31 @@
+# ArgoCD Application — GitOps deployment of the JobTracker stack.
+# Apply once (kubectl apply -f) against a cluster that has ArgoCD installed;
+# thereafter ArgoCD keeps the cluster in sync with the prod overlay in Git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jobtracker
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/GHCR_OWNER/application-tracker.git
+    targetRevision: main
+    path: infrastructure/kubernetes/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jobtracker
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

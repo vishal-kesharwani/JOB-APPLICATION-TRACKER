@@ -1,0 +1,108 @@
+# Observability overlay (LGTM stack + OpenTelemetry Collector).
+#
+# Run alongside the app stack so everything shares one Docker network:
+#   docker-compose -f docker-compose.yml -f docker-compose.observability.yml up --build
+#
+# Then set TRACING_SAMPLING_PROBABILITY=1.0 and
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces on the services
+# (already defaulted below) to emit traces.
+#
+# UIs:  Grafana  http://localhost:3000  (admin / admin)
+#       Prometheus http://localhost:9090
+#       Tempo     http://localhost:3200
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: jobtracker-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./observability/otel-collector/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # collector-exported metrics for Prometheus
+    depends_on:
+      - tempo
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: jobtracker-tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: jobtracker-loki
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    container_name: jobtracker-promtail
+    command: ["-config.file=/etc/promtail/promtail-config.yaml"]
+    volumes:
+      - ./observability/loki/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: jobtracker-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=6h"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: jobtracker-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: traceToLogs
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  # Point the app services at the collector and turn tracing on when the overlay is active.
+  application-service:
+    environment:
+      TRACING_SAMPLING_PROBABILITY: 1.0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+
+  notification-service:
+    environment:
+      TRACING_SAMPLING_PROBABILITY: 1.0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+
+  analytics-service:
+    environment:
+      TRACING_SAMPLING_PROBABILITY: 1.0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+
+volumes:
+  tempo-data:
+  loki-data:
+  prometheus-data:
+  grafana-data:

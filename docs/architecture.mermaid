@@ -1,0 +1,52 @@
+flowchart TB
+    client([Client / curl / Ingress])
+
+    subgraph writepath[Write path - source of truth]
+        app[application-service<br/>Spring Boot 21]
+        pg[(PostgreSQL<br/>Flyway migrations)]
+        app -->|owns, only writer| pg
+    end
+
+    client -->|REST| app
+
+    app -->|publish| k{{Kafka<br/>application-created<br/>application-status-updated<br/>application-deleted}}
+
+    subgraph readpath[Event-driven consumers - database per service]
+        notif[notification-service<br/>reminder scheduler]
+        analytics[analytics-service<br/>reporting API]
+        redis[(Redis<br/>aggregates)]
+        analytics --> redis
+    end
+
+    k -->|consume| notif
+    k -->|consume| analytics
+
+    client -->|GET reminders| notif
+    client -->|GET analytics| analytics
+
+    subgraph obs[Observability - LGTM]
+        otel[OTel Collector]
+        prom[Prometheus]
+        tempo[Tempo - traces]
+        loki[Loki - logs]
+        graf[Grafana]
+    end
+
+    app -. OTLP traces .-> otel
+    notif -. OTLP traces .-> otel
+    analytics -. OTLP traces .-> otel
+    otel --> tempo
+    prom -->|scrape /actuator/prometheus| app
+    prom --> notif
+    prom --> analytics
+    graf --> prom
+    graf --> tempo
+    graf --> loki
+
+    subgraph platform[Platform - GitOps]
+        gha[GitHub Actions CI/CD]
+        argo[ArgoCD]
+        eks[AWS EKS - Terraform]
+        gha -->|push images + bump tags| argo
+        argo -->|sync| eks
+    end

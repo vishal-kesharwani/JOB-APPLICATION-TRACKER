@@ -1,0 +1,47 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: notification-service
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+notification:
+  follow-up-reminder-delay: ${FOLLOW_UP_REMINDER_DELAY:10m}
+  interview-prep-reminder-delay: ${INTERVIEW_PREP_REMINDER_DELAY:5m}
+  offer-follow-up-reminder-delay: ${OFFER_FOLLOW_UP_REMINDER_DELAY:15m}
+  scheduler-pool-size: ${NOTIFICATION_SCHEDULER_POOL_SIZE:2}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: notification-service
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"
+  level:
+    com.jobtracker.notification: INFO
+    org.apache.kafka: WARN

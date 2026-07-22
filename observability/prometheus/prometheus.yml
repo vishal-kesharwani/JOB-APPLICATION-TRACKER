@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    stack: jobtracker
+
+scrape_configs:
+  - job_name: application-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["application-service:8081"]
+        labels:
+          service: application-service
+
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["notification-service:8082"]
+        labels:
+          service: notification-service
+
+  - job_name: analytics-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["analytics-service:8083"]
+        labels:
+          service: analytics-service
+
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+        labels:
+          service: otel-collector
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

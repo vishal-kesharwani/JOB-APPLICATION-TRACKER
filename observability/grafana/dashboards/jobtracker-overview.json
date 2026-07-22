@@ -1,0 +1,97 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "JobTracker — Platform Overview",
+  "uid": "jobtracker-overview",
+  "tags": ["jobtracker"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Services Up",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "count(up{job=~\".*-service\"} == 1)", "legendFormat": "up" }
+      ],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 3 } ] } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Applications Created (rate/min)",
+      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(job_applications_total[5m])) * 60", "legendFormat": "created/min" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Status Updates (rate/min)",
+      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(job_status_updates_total[5m])) * 60", "legendFormat": "updates/min" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Application Creation Latency (p50 / p95 / p99)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(application_creation_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(application_creation_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(application_creation_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka Events Published vs Failed",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(kafka_events_published_total[5m]))", "legendFormat": "published" },
+        { "expr": "sum(rate(kafka_events_publish_failed_total[5m]))", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Events Consumed by Downstream Services",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(notification_events_consumed_total[5m])) by (event_type)", "legendFormat": "notif {{event_type}}" },
+        { "expr": "sum(rate(analytics_events_consumed_total[5m])) by (event_type)", "legendFormat": "analytics {{event_type}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Reminders Scheduled / Triggered / Cancelled",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(reminders_scheduled_total[5m]))", "legendFormat": "scheduled" },
+        { "expr": "sum(rate(reminders_triggered_total[5m]))", "legendFormat": "triggered" },
+        { "expr": "sum(rate(reminders_cancelled_total[5m]))", "legendFormat": "cancelled" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Heap Used by Service",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(jvm_memory_used_bytes{area=\"heap\"}) by (application)", "legendFormat": "{{application}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    }
+  ]
+}
