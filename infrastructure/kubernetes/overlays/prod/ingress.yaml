@@ -34,3 +34,11 @@ spec:
                 name: analytics-service
                 port:
                   number: 8083
+          # Catch-all: everything else serves the React UI.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

@@ -14,3 +14,4 @@ resources:
   - application-service.yaml
   - notification-service.yaml
   - analytics-service.yaml
+  - frontend.yaml
