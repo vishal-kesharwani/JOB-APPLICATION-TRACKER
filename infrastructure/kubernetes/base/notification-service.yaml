@@ -99,3 +99,13 @@ spec:
         target:
           type: Utilization
           averageUtilization: 75
+  behavior:
+    # A booting JVM burns ~350m against a 250m request — 140% of a 75% target.
+    # Without a stabilization window the autoscaler reads that transient spike
+    # as load and scales out; the replacement pod also boots hot, so the loop
+    # runs to maxReplicas with no traffic at all. Three minutes is longer than
+    # a cold start here, so only sustained load survives it.
+    scaleUp:
+      stabilizationWindowSeconds: 180
+    scaleDown:
+      stabilizationWindowSeconds: 300

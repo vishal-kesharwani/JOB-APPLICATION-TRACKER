@@ -71,3 +71,11 @@ spec:
         target:
           type: Utilization
           averageUtilization: 75
+  behavior:
+    # nginx starts in milliseconds so the cold-start spike does not apply here,
+    # but keeping the windows consistent across the stack avoids one service
+    # behaving differently from the rest for no stated reason.
+    scaleUp:
+      stabilizationWindowSeconds: 180
+    scaleDown:
+      stabilizationWindowSeconds: 300

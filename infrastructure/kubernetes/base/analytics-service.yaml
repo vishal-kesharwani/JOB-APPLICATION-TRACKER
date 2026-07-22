@@ -97,3 +97,10 @@ spec:
         target:
           type: Utilization
           averageUtilization: 75
+  behavior:
+    # See notification-service.yaml — a cold JVM start looks like load to the
+    # autoscaler unless a stabilization window filters it out.
+    scaleUp:
+      stabilizationWindowSeconds: 180
+    scaleDown:
+      stabilizationWindowSeconds: 300
