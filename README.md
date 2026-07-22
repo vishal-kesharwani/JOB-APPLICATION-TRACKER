@@ -109,8 +109,13 @@ and fix.
   </tr>
 </table>
 
+**Chaos test — self-healing.** Delete a running pod and let Kubernetes deal with it:
+
+![Chaos test](docs/screenshots/chaos-test.png)
+<div align="center"><em>Pod <code>…hxp7d</code> (10.244.0.28) deleted — 32 seconds later <code>…tn7t4</code> (10.244.0.35) is already scheduled and starting</em></div>
+
 ![Chaos recovery](docs/screenshots/chaos-recovery.png)
-<div align="center"><em>Self-healing — a deleted pod is replaced by the ReplicaSet within 32 seconds and passes readiness ~3 minutes later, unprompted</em></div>
+<div align="center"><em>Recovered to 1/1 with 0 restarts in ~3 minutes. The <code>SuccessfulCreate</code> event shows the ReplicaSet acted on its own — and the failing startup probe below it is the container being <strong>allowed</strong> to boot rather than killed</em></div>
 
 ## 🏗️ Architecture
 
