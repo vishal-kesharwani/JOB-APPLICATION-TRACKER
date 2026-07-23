@@ -5,11 +5,24 @@ name: CD
 on:
   push:
     branches: [main]
+    # Documentation changes cannot alter an image, and rebuilding four services
+    # to publish identical layers costs ~5 minutes per commit.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
   workflow_dispatch:
 
 permissions:
   contents: write      # to commit the image-tag bump back to the repo
   packages: write      # to push images to GHCR
+
+# Serialise runs on a branch so two bump-manifests jobs never race to push the
+# same file. Queued rather than cancelled, so every commit still gets images.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -63,19 +76,49 @@ jobs:
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
           sudo mv kustomize /usr/local/bin/
 
-      - name: Pin image tags to this commit
-        working-directory: infrastructure/kubernetes/overlays/prod
+      # Pin the tags and push, retrying against whatever main looks like now.
+      #
+      # This job runs after the image builds, which take minutes, so main has
+      # often moved on by the time it pushes — a plain `git push` is rejected
+      # non-fast-forward and the deploy commit is silently lost. Rather than
+      # rebasing (two CD runs would conflict over the same kustomization.yaml),
+      # each attempt resets to the current main and redoes the edit, which is
+      # idempotent: the result depends only on github.sha, never on what the
+      # working tree happened to contain.
+      - name: Pin image tags to this commit and push
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          OWNER="${{ github.repository_owner }}"
-          SHA="${{ github.sha }}"
-          for svc in application-service notification-service analytics-service frontend; do
-            kustomize edit set image ${svc}=ghcr.io/${OWNER}/${svc}:${SHA}
-          done
-
-      - name: Commit the bump
-        run: |
+          set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add infrastructure/kubernetes/overlays/prod/kustomization.yaml
-          git commit -m "ci: deploy ${{ github.sha }}" || echo "nothing to commit"
-          git push
+
+          for attempt in 1 2 3 4 5; do
+            # FETCH_HEAD, not origin/$BRANCH: checkout clones shallow by default
+            # and the remote-tracking ref is not reliably updated by this fetch.
+            git fetch origin "$BRANCH"
+            git reset --hard FETCH_HEAD
+
+            ( cd infrastructure/kubernetes/overlays/prod
+              for svc in application-service notification-service analytics-service frontend; do
+                kustomize edit set image "${svc}=ghcr.io/${OWNER}/${svc}:${SHA}"
+              done )
+
+            git add infrastructure/kubernetes/overlays/prod/kustomization.yaml
+            if git diff --cached --quiet; then
+              echo "Tags already pinned to ${SHA} — nothing to commit."
+              exit 0
+            fi
+
+            git commit -m "ci: deploy ${SHA}"
+            if git push origin "HEAD:$BRANCH"; then
+              echo "Pushed on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Push rejected on attempt ${attempt} — $BRANCH moved. Retrying."
+          done
+
+          echo "::error::Could not push the image-tag bump after 5 attempts."
+          exit 1
