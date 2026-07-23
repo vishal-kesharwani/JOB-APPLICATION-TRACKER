@@ -22,6 +22,14 @@ event-driven backend, full observability, Kubernetes deployment, and GitOps deli
 
 [![CI](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/actions/workflows/ci.yml/badge.svg)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/actions/workflows/ci.yml)
 
+[![Stars](https://img.shields.io/github/stars/vishal-kesharwani/JOB-APPLICATION-TRACKER?style=social)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/stargazers)
+[![Forks](https://img.shields.io/github/forks/vishal-kesharwani/JOB-APPLICATION-TRACKER?style=social)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/network/members)
+[![Watchers](https://img.shields.io/github/watchers/vishal-kesharwani/JOB-APPLICATION-TRACKER?style=social)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/watchers)
+
+**⭐ If you use this — or the [deployment log](docs/KIND-DEPLOYMENT-LOG.md) saves you an
+afternoon of debugging — please star the repo.** It's the only signal I get that any of this
+was useful to someone.
+
 </div>
 
 ---
@@ -308,6 +316,13 @@ kubectl -n jobtracker port-forward svc/grafana 3000:3000     # admin / admin
 - [x] Chaos + load test scripts
 - [ ] Canary deployments with Argo Rollouts
 - [ ] Authentication (OIDC) and multi-user support
+
+## ⭐ Found this useful?
+
+Star it. If you forked it or borrowed something from the manifests, a star costs you nothing
+and tells me which parts were worth writing up. Issues and questions are welcome too —
+particularly if you hit a failure mode the [deployment log](docs/KIND-DEPLOYMENT-LOG.md)
+doesn't cover yet.
 
 ## 📄 License
 
