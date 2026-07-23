@@ -22,9 +22,9 @@ event-driven backend, full observability, Kubernetes deployment, and GitOps deli
 
 [![CI](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/actions/workflows/ci.yml/badge.svg)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/actions/workflows/ci.yml)
 
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=vishal-kesharwani.JOB-APPLICATION-TRACKER)
 [![Stars](https://img.shields.io/github/stars/vishal-kesharwani/JOB-APPLICATION-TRACKER?style=social)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/stargazers)
 [![Forks](https://img.shields.io/github/forks/vishal-kesharwani/JOB-APPLICATION-TRACKER?style=social)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/network/members)
-[![Watchers](https://img.shields.io/github/watchers/vishal-kesharwani/JOB-APPLICATION-TRACKER?style=social)](https://github.com/vishal-kesharwani/JOB-APPLICATION-TRACKER/watchers)
 
 **⭐ If you use this — or the [deployment log](docs/KIND-DEPLOYMENT-LOG.md) saves you an
 afternoon of debugging — please star the repo.** It's the only signal I get that any of this
