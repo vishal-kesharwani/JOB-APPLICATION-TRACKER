@@ -10,16 +10,16 @@ resources:
 images:
 - name: analytics-service
   newName: ghcr.io/vishal-kesharwani/analytics-service
-  newTag: e789ea4ee834bd386d3a4d55a83808bcfbe1b363
+  newTag: 23ba55b125be6a6999207abdf1a5eb824dbb2069
 - name: application-service
   newName: ghcr.io/vishal-kesharwani/application-service
-  newTag: e789ea4ee834bd386d3a4d55a83808bcfbe1b363
+  newTag: 23ba55b125be6a6999207abdf1a5eb824dbb2069
 - name: frontend
   newName: ghcr.io/vishal-kesharwani/frontend
-  newTag: e789ea4ee834bd386d3a4d55a83808bcfbe1b363
+  newTag: 23ba55b125be6a6999207abdf1a5eb824dbb2069
 - name: notification-service
   newName: ghcr.io/vishal-kesharwani/notification-service
-  newTag: e789ea4ee834bd386d3a4d55a83808bcfbe1b363
+  newTag: 23ba55b125be6a6999207abdf1a5eb824dbb2069
 
 patches:
 - patch: |-
